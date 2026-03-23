@@ -410,6 +410,20 @@ st.markdown(
     div[data-testid="stAppViewContainer"] .main {
         overflow-x: hidden;
     }
+    section.main p.hart-footer-note {
+        font-size: 0.9rem !important;
+        line-height: 1.45 !important;
+        color: rgba(49, 51, 63, 0.72) !important;
+        margin: 0.4rem 0 0 0 !important;
+    }
+    .hart-footer-note a {
+        color: #1a4b8c;
+        font-weight: 500;
+        text-decoration: underline;
+    }
+    .hart-footer-note a:hover {
+        color: #0d2d5c;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -509,28 +523,30 @@ with col_param:
 
     st.divider()
     st.markdown("**Fundo DI**")
-    f1, f2, f3 = st.columns([0.9, 1, 1])
-    inc_fundo = f1.checkbox("Ativo", value=False, key="inc_fundo")
-    pct_fundo_cdi = f2.number_input(
-        "% CDI",
-        min_value=0.0,
-        max_value=300.0,
-        value=100.0,
-        step=0.5,
-        format="%.2f",
-        key="pct_fundo_cdi",
-        disabled=not inc_fundo,
-    )
-    adm_fundo = f3.number_input(
-        "Adm % a.a.",
-        min_value=0.0,
-        max_value=10.0,
-        value=0.5,
-        step=0.05,
-        format="%.2f",
-        key="adm_fundo",
-        disabled=not inc_fundo,
-    )
+    inc_fundo = st.checkbox("Ativo", value=False, key="inc_fundo")
+    f_cd, f_adm = st.columns(2)
+    with f_cd:
+        pct_fundo_cdi = st.number_input(
+            "% CDI",
+            min_value=0.0,
+            max_value=300.0,
+            value=100.0,
+            step=0.5,
+            format="%.2f",
+            key="pct_fundo_cdi",
+            disabled=not inc_fundo,
+        )
+    with f_adm:
+        adm_fundo = st.number_input(
+            "Adm % a.a.",
+            min_value=0.0,
+            max_value=10.0,
+            value=0.5,
+            step=0.05,
+            format="%.2f",
+            key="adm_fundo",
+            disabled=not inc_fundo,
+        )
 
     st.divider()
     inc_poup = st.checkbox("Poupança (regra BCB Selic/TR)", value=True, key="inc_poup")
@@ -708,7 +724,8 @@ with col_result:
         except Exception as e:
             st.error(f"Não foi possível gerar o PDF ({e}). Instale: pip install reportlab")
 
-st.caption(
-    "Fonte: SGS/BCB · educacional — não substitui assessoria; IR sobre rendimento; fundos podem ter come-cotas. "
-    "Conheça também o [Simula Lance](https://simula-lance.streamlit.app/) — simulador de consórcio."
+st.markdown(
+    '<p class="hart-footer-note">Fonte: SGS/BCB · educacional — não substitui assessoria; IR sobre rendimento; fundos podem ter come-cotas. '
+    'Conheça também o <a href="https://simula-lance.streamlit.app/" target="_blank" rel="noopener noreferrer">Simula Lance</a> — simulador de consórcio.</p>',
+    unsafe_allow_html=True,
 )
