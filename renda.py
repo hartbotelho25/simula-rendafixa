@@ -334,41 +334,82 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+    /* Layout compacto sem “esmagar” a página: evite width="large" nas colunas da tabela — no Streamlit isso fixa ~400px e estoura a largura (barra horizontal + altura extra). */
+    header[data-testid="stHeader"] {
+        padding-top: 0.35rem !important;
+        padding-bottom: 0.35rem !important;
+    }
+    div[data-testid="stToolbar"] { padding-top: 0 !important; padding-bottom: 0 !important; }
+    footer { visibility: hidden !important; height: 0 !important; min-height: 0 !important; }
+    section.main > div.block-container {
+        padding-top: 0.65rem !important;
+        padding-bottom: 0.15rem !important;
+        max-width: 100%;
+    }
+    section.main h1 {
+        font-size: 1.42rem !important;
+        margin: 0 0 0.1rem 0 !important;
+        line-height: 1.15 !important;
+    }
+    section.main h2, section.main h3 {
+        font-size: 1.02rem !important;
+        margin: 0.05rem 0 0.2rem 0 !important;
+        line-height: 1.2 !important;
+    }
+    hr {
+        margin: 0.28rem 0 !important;
+        border-color: #e8e8ef;
+    }
+    div[data-testid="stCaptionContainer"] p {
+        margin-top: 0.1rem !important;
+        margin-bottom: 0.15rem !important;
+        font-size: 0.78rem !important;
+        line-height: 1.25 !important;
+    }
     section.main [data-testid="stNumberInput"] input { max-width: 7.5rem; }
     section.main [data-testid="stTextInput"] input { max-width: 11rem; }
-    section.main [data-testid="stNumberInput"] label p { font-size: 0.85rem; }
-    section.main div[data-testid="stRadio"] label { font-size: 0.8rem; }
-    div[data-testid="stMetricValue"] { font-size: 1.35rem; }
-    div[data-testid="stMetricLabel"] { font-size: 0.75rem; }
+    section.main [data-testid="stNumberInput"] label p { font-size: 0.8rem; }
+    section.main div[data-testid="stRadio"] label { font-size: 0.78rem; }
+    section.main [data-testid="stVerticalBlock"] > div {
+        gap: 0.35rem !important;
+    }
+    div[data-testid="stMetricValue"] { font-size: 1.08rem !important; margin-top: 0 !important; }
+    div[data-testid="stMetricLabel"] { font-size: 0.68rem !important; }
+    div[data-testid="column"] [data-testid="stMetricValue"] { font-size: 1.08rem !important; }
+    [data-testid="stDownloadButton"] button {
+        padding-top: 0.3rem !important;
+        padding-bottom: 0.3rem !important;
+        min-height: 2.1rem !important;
+    }
     .hart-credit-box {
         background: linear-gradient(135deg, #f0f4ff 0%, #e8eef8 100%);
         border: 1px solid #c5d0e6;
-        border-radius: 10px;
-        padding: 14px 18px;
-        margin: 8px 0 16px 0;
-        text-align: center;
-        font-size: 1.15rem;
-        color: #1a2744;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    }
-    .hart-credit-box .hart-name { font-weight: 700; font-size: 1.25rem; letter-spacing: 0.02em; }
-    .hart-promo-bar {
-        text-align: center;
-        font-size: 0.95rem;
-        color: #3d4f6f;
-        margin: 0 0 12px 0;
-        padding: 10px 14px;
-        background: #f5f7fb;
         border-radius: 8px;
-        border: 1px solid #e0e6f0;
-        line-height: 1.5;
+        padding: 7px 12px;
+        margin: 2px 0 6px 0;
+        text-align: center;
+        font-size: 0.98rem;
+        color: #1a2744;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    .hart-promo-bar a {
-        color: #1a4b8c;
-        font-weight: 600;
-        text-decoration: none;
+    .hart-credit-box .hart-name { font-weight: 700; font-size: 1.08rem; letter-spacing: 0.02em; }
+    /* Colunas lado a lado: sem esticar a mais baixa (evita faixa branca enorme abaixo do PDF/resultados) */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: flex-start !important;
     }
-    .hart-promo-bar a:hover { text-decoration: underline; }
+    div[data-testid="stDataFrame"] {
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+    div[data-testid="stDataFrame"] [class*="glide-data-grid"] {
+        font-size: 0.78rem !important;
+    }
+    div[data-testid="stDataFrame"] [class*="dvn"] {
+        min-height: 22px !important;
+    }
+    div[data-testid="stAppViewContainer"] .main {
+        overflow-x: hidden;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -392,7 +433,7 @@ cdi_aa = cdi_percentual_anual(cdi_dia)
 tx_mes_poup = poupança_taxa_mensal_aproximada(selic_meta_aa, tr_m, cdi_dia)
 poupanca_aa_equiv = (1 + tx_mes_poup) ** 12 - 1
 
-col_param, col_result = st.columns([0.38, 0.62], gap="large")
+col_param, col_result = st.columns([0.32, 0.68], gap="small")
 
 with col_param:
     st.subheader("Parâmetros")
@@ -493,19 +534,9 @@ with col_param:
 
     st.divider()
     inc_poup = st.checkbox("Poupança (regra BCB Selic/TR)", value=True, key="inc_poup")
-    st.markdown(
-        '<div class="hart-promo-bar">'
-        'Conheça também o <a href="https://simula-lance.streamlit.app/" target="_blank" rel="noopener noreferrer">Simula Lance</a> — simulador de consórcio'
-        "</div>",
-        unsafe_allow_html=True,
-    )
 
 with col_result:
-    st.subheader("Mercado (BCB)")
-    st.caption(
-        "Dados oficiais do **Banco Central** (séries SGS), obtidos automaticamente pela API pública "
-        "— última leitura disponível no BC."
-    )
+    st.markdown("**Mercado (BCB)** · SGS / API pública")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Selic meta", f"{selic_meta_aa:.2f}%", help="Série 432, % a.a.")
     m2.metric("CDI (impl.)", f"{cdi_aa:.2f}%", help="A partir do CDI diário (série 12).")
@@ -514,7 +545,7 @@ with col_result:
 
     row_res_t, row_res_g = st.columns([2.0, 1.1])
     with row_res_t:
-        st.subheader("Resultados")
+        st.markdown("**Resultados**")
     with row_res_g:
         exibir_inflacao = st.checkbox(
             "Ganho real (IPCA)",
@@ -622,33 +653,36 @@ with col_result:
             }
         )
 
-    st.markdown(
-        f"**{prazo_meses}** meses · **{prazo_dias}** dias (IR) · "
-        f"{'real (IPCA)' if exibir_inflacao else 'nominal líq.'}"
-    )
-
     if not resultados:
         st.warning("Marque ao menos um produto à esquerda (e modalidades CDB/LCI, se aplicável).")
     else:
-        if exibir_inflacao:
-            st.caption(f"Taxas efetivas após IPCA ~{ipca_12m:.2f}% a.a. e IR quando couber.")
-        else:
-            st.caption("Taxas nominais líquidas de IR (sem descontar inflação).")
+        _modo = "real (IPCA)" if exibir_inflacao else "nominal líq."
+        _det = (
+            f"Efetivas após IPCA ~{ipca_12m:.1f}% e IR."
+            if exibir_inflacao
+            else "Nominais líquidas de IR."
+        )
+        st.caption(f"{prazo_meses} meses · {prazo_dias} dias (IR) · {_modo}. {_det}")
 
         df_res = pd.DataFrame(resultados)
+        _n = len(resultados)
+        # Glide usa ~38–42px/linha; 22px subestimava → barra de rolagem dentro da tabela.
+        _h = 52 + _n * 42
         st.dataframe(
             df_res,
             use_container_width=True,
             hide_index=True,
-            height=min(380, 56 + len(resultados) * 34),
+            height=min(520, max(110, _h)),
             column_config={
-                "Ativo": st.column_config.TextColumn("Ativo", width="small"),
+                # Streamlit: small≈75px, medium≈200px, large≈400px — NÃO use "large" na coluna Ativo (estoura a tabela).
+                "Ativo": st.column_config.TextColumn("Ativo", width="medium"),
                 "Condição": st.column_config.TextColumn("Condição", width="medium"),
                 "IR": st.column_config.TextColumn("IR", width="small"),
                 "% mês": st.column_config.TextColumn("% mês", width="small"),
                 "% a.a.": st.column_config.TextColumn("% a.a.", width="small"),
-                "Montante": st.column_config.TextColumn("Montante", width="small"),
-                "Recebido": st.column_config.TextColumn("Recebido", width="small"),
+                # Valores R$ precisam de mais que "small" (~75px) para não cortar centavos
+                "Montante": st.column_config.TextColumn("Montante", width=None),
+                "Recebido": st.column_config.TextColumn("Recebido", width=None),
             },
         )
         try:
@@ -674,8 +708,7 @@ with col_result:
         except Exception as e:
             st.error(f"Não foi possível gerar o PDF ({e}). Instale: pip install reportlab")
 
-st.divider()
 st.caption(
-    "Fonte: API SGS do BCB. Simulação simplificada — não substitui assessoria; "
-    "IR sobre rendimento; fundos podem ter come-cotas."
+    "Fonte: SGS/BCB · educacional — não substitui assessoria; IR sobre rendimento; fundos podem ter come-cotas. "
+    "Conheça também o [Simula Lance](https://simula-lance.streamlit.app/) — simulador de consórcio."
 )
