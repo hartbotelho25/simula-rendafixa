@@ -192,6 +192,20 @@ def montar_linhas(
     return linhas
 
 
+def info_pai_negociacao(ativo_escolhido: str) -> dict[str, Any] | None:
+    """Dados mínimos do ativo para negociação quando a linha da prateleira não foi incluída."""
+    m: dict[str, tuple[str, str]] = {
+        "CDB · pós": ("CDB", "pos"),
+        "CDB · pré": ("CDB", "pre"),
+        "LCI/LCA · pós": ("LCI/LCA", "pos"),
+        "LCI/LCA · pré": ("LCI/LCA", "pre"),
+    }
+    if ativo_escolhido not in m:
+        return None
+    tipo, modalidade = m[ativo_escolhido]
+    return {"nome": ativo_escolhido, "tipo": tipo, "modalidade": modalidade}
+
+
 def linha_negociada_de_pai(
     info_pai: dict[str, Any],
     nova_taxa_percent: float,
@@ -864,6 +878,7 @@ with col_result:
     prazo_dias = int(prazo_meses * 30)
 
     resultados: list[dict[str, str]] = []
+    nego_linha_inserida = False
 
     for info in linhas:
         resultados.append(
@@ -883,6 +898,28 @@ with col_result:
         ):
             info_neg = linha_negociada_de_pai(
                 info,
+                nova_taxa_negociada,
+                meses_carencia,
+                cdi_aa,
+            )
+            resultados.append(
+                resultado_para_tabela(
+                    info_neg,
+                    valor_total=valor_total,
+                    prazo_meses=prazo_meses,
+                    prazo_dias=prazo_dias,
+                    exibir_inflacao=exibir_inflacao,
+                    ipca_12m=ipca_12m,
+                )
+            )
+            nego_linha_inserida = True
+
+    # Pré (ou pós) negociado sem a linha correspondente na prateleira: antes não aparecia no quadro.
+    if negociacao_ativa and not nego_linha_inserida:
+        pai_sint = info_pai_negociacao(ativo_negociado)
+        if pai_sint is not None:
+            info_neg = linha_negociada_de_pai(
+                pai_sint,
                 nova_taxa_negociada,
                 meses_carencia,
                 cdi_aa,
