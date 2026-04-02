@@ -96,6 +96,173 @@ def taxa_bruta_anual_decimal(
     return taxa_pre_fixada_aa / 100.0
 
 
+def montar_linhas(
+    *,
+    inc_poup: bool,
+    inc_cdb: bool,
+    inc_cdb_pos: bool,
+    inc_cdb_pre: bool,
+    pct_cdb: float,
+    pre_cdb: float,
+    inc_lci: bool,
+    inc_lci_pos: bool,
+    inc_lci_pre: bool,
+    pct_lci: float,
+    pre_lci: float,
+    inc_fundo: bool,
+    pct_fundo_cdi: float,
+    adm_fundo: float,
+    poupanca_aa_equiv: float,
+    cdi_aa: float,
+) -> list[dict[str, Any]]:
+    """Monta lista de ativos para simulação (mesma ordem da tabela principal)."""
+    linhas: list[dict[str, Any]] = []
+
+    if inc_poup:
+        linhas.append(
+            {
+                "nome": "Poupança",
+                "tipo": "Poupança",
+                "taxa_liquida_anual": poupanca_aa_equiv,
+                "detalhe": f"~{poupanca_aa_equiv * 100:.2f}% a.a. eq.",
+            }
+        )
+
+    if inc_cdb and inc_cdb_pos:
+        bruta = taxa_bruta_anual_decimal("pos", pct_cdb, pre_cdb, cdi_aa)
+        linhas.append(
+            {
+                "nome": "CDB · pós",
+                "tipo": "CDB",
+                "modalidade": "pos",
+                "taxa_bruta_anual": bruta,
+                "detalhe": f"{pct_cdb:.2f}% CDI → ~{bruta * 100:.2f}% bruto",
+            }
+        )
+    if inc_cdb and inc_cdb_pre:
+        bruta = taxa_bruta_anual_decimal("pre", pct_cdb, pre_cdb, cdi_aa)
+        linhas.append(
+            {
+                "nome": "CDB · pré",
+                "tipo": "CDB",
+                "modalidade": "pre",
+                "taxa_bruta_anual": bruta,
+                "detalhe": f"Pré {pre_cdb:.2f}% a.a.",
+            }
+        )
+
+    if inc_lci and inc_lci_pos:
+        bruta = taxa_bruta_anual_decimal("pos", pct_lci, pre_lci, cdi_aa)
+        linhas.append(
+            {
+                "nome": "LCI/LCA · pós",
+                "tipo": "LCI/LCA",
+                "modalidade": "pos",
+                "taxa_bruta_anual": bruta,
+                "detalhe": f"{pct_lci:.2f}% CDI → ~{bruta * 100:.2f}% bruto",
+            }
+        )
+    if inc_lci and inc_lci_pre:
+        bruta = taxa_bruta_anual_decimal("pre", pct_lci, pre_lci, cdi_aa)
+        linhas.append(
+            {
+                "nome": "LCI/LCA · pré",
+                "tipo": "LCI/LCA",
+                "modalidade": "pre",
+                "taxa_bruta_anual": bruta,
+                "detalhe": f"Pré {pre_lci:.2f}% a.a.",
+            }
+        )
+
+    if inc_fundo:
+        bruta_fundo_cdi = (cdi_aa * (pct_fundo_cdi / 100.0)) / 100.0
+        bruta_fundo = max(bruta_fundo_cdi - adm_fundo / 100.0, 0.0)
+        linhas.append(
+            {
+                "nome": "Fundo DI",
+                "tipo": "CDB",
+                "modalidade": "pos",
+                "taxa_bruta_anual": bruta_fundo,
+                "pct_fundo_cdi_ref": pct_fundo_cdi,
+                "adm_fundo": adm_fundo,
+                "detalhe": f"{pct_fundo_cdi:.2f}% CDI − {adm_fundo:.2f}% adm",
+            }
+        )
+
+    return linhas
+
+
+def linha_negociada_de_pai(
+    info_pai: dict[str, Any],
+    nova_taxa_percent: float,
+    meses_carencia: int,
+    cdi_aa: float,
+) -> dict[str, Any]:
+    """Clona lógica do ativo pai com nova taxa; mantém tipo (IR / isenção) e texto de Condição como na prateleira."""
+    nome_base = str(info_pai["nome"])
+    suf = f"C {int(meses_carencia)}m"
+    nome_exibir = f"{nome_base} {suf}"
+    modalidade = str(info_pai.get("modalidade") or "pos")
+
+    if modalidade == "pre":
+        bruta = taxa_bruta_anual_decimal("pre", 0.0, nova_taxa_percent, cdi_aa)
+        detalhe = f"Pré {nova_taxa_percent:.2f}% a.a."
+    else:
+        bruta = taxa_bruta_anual_decimal("pos", nova_taxa_percent, 0.0, cdi_aa)
+        detalhe = f"{nova_taxa_percent:.2f}% CDI → ~{bruta * 100:.2f}% bruto"
+
+    return {
+        "nome": nome_exibir,
+        "tipo": info_pai["tipo"],
+        "modalidade": modalidade,
+        "taxa_bruta_anual": bruta,
+        "detalhe": detalhe,
+        "condicao_negocial": True,
+    }
+
+
+def resultado_para_tabela(
+    info: dict[str, Any],
+    *,
+    valor_total: float,
+    prazo_meses: int,
+    prazo_dias: int,
+    exibir_inflacao: bool,
+    ipca_12m: float,
+) -> dict[str, str]:
+    """Uma linha da tabela de resultados a partir do dict de ativo."""
+    if "taxa_liquida_anual" in info:
+        taxa_liquida_anual = float(info["taxa_liquida_anual"])
+        ir_label = "0%"
+    else:
+        bruta = float(info["taxa_bruta_anual"])
+        aliquota_ir = calcular_ir(prazo_dias, str(info["tipo"]))
+        taxa_liquida_anual = bruta * (1 - aliquota_ir)
+        ir_label = f"{aliquota_ir * 100:.1f}%"
+
+    if exibir_inflacao:
+        taxa_exibida = (1 + taxa_liquida_anual) / (1 + ipca_12m / 100) - 1
+    else:
+        taxa_exibida = taxa_liquida_anual
+
+    valor_final, taxa_mensal = projetar_montante(valor_total, taxa_exibida, prazo_meses)
+    recebido = valor_final - valor_total
+
+    nome_col = str(info["nome"])
+    if info.get("condicao_negocial"):
+        nome_col = f"✨ {nome_col}"
+
+    return {
+        "Ativo": nome_col,
+        "Condição": str(info.get("detalhe", "")),
+        "IR": ir_label,
+        "% mês": f"{taxa_mensal * 100:.3f}",
+        "% a.a.": f"{taxa_exibida * 100:.2f}",
+        "Montante": f"R$ {format_moeda_br(valor_final)}",
+        "Recebido": f"R$ {format_moeda_br(recebido)}",
+    }
+
+
 def format_moeda_br(valor: float) -> str:
     """Exibe valor com milhar em ponto e centavos após vírgula (ex.: 10.000,00)."""
     neg = valor < 0
@@ -346,10 +513,30 @@ st.markdown(
         padding-bottom: 0.15rem !important;
         max-width: 100%;
     }
+    /* st.title() não herda bem text-align; título principal usa .hart-page-title-wrap */
     section.main h1 {
         font-size: 1.42rem !important;
         margin: 0 0 0.1rem 0 !important;
         line-height: 1.15 !important;
+    }
+    div[data-testid="stMarkdownContainer"]:has(.hart-page-title-wrap) {
+        width: 100% !important;
+    }
+    .hart-page-title-wrap {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 0 0.12rem 0 !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        box-sizing: border-box !important;
+    }
+    .hart-page-title-wrap .hart-page-title {
+        font-size: 1.58rem !important;
+        font-weight: 600 !important;
+        line-height: 1.15 !important;
+        margin: 0 !important;
+        color: inherit !important;
     }
     section.main h2, section.main h3 {
         font-size: 1.02rem !important;
@@ -424,12 +611,32 @@ st.markdown(
     .hart-footer-note a:hover {
         color: #0d2d5c;
     }
+    section.main p.hart-footer-note.hart-footer-simula-lance {
+        margin: 0.55rem 0 0 0 !important;
+        padding: 10px 14px !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        line-height: 1.45 !important;
+        color: #1a2744 !important;
+        background: linear-gradient(135deg, #f4f7ff 0%, #e8eef8 100%) !important;
+        border: 1px solid #b8c5e0 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(26, 39, 68, 0.08) !important;
+        text-align: center !important;
+    }
+    section.main p.hart-footer-note.hart-footer-simula-lance a {
+        font-weight: 700 !important;
+        color: #0d3d7a !important;
+    }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-st.title("Simulador de renda fixa")
+st.markdown(
+    '<div class="hart-page-title-wrap"><span class="hart-page-title">Simulador de renda fixa</span></div>',
+    unsafe_allow_html=True,
+)
 st.markdown(
     '<div class="hart-credit-box">Desenvolvido por <span class="hart-name">Hart Botelho</span>, CFP®</div>',
     unsafe_allow_html=True,
@@ -446,6 +653,9 @@ except Exception as e:
 cdi_aa = cdi_percentual_anual(cdi_dia)
 tx_mes_poup = poupança_taxa_mensal_aproximada(selic_meta_aa, tr_m, cdi_dia)
 poupanca_aa_equiv = (1 + tx_mes_poup) ** 12 - 1
+
+# Opções fixas para comparação com taxa negociada (CDB/LCI pré e pós).
+OPCOES_NEGOCIACAO_RF = ["CDB · pós", "CDB · pré", "LCI/LCA · pós", "LCI/LCA · pré"]
 
 col_param, col_result = st.columns([0.32, 0.68], gap="small")
 
@@ -468,7 +678,17 @@ with col_param:
     prazo_meses = int(g2.number_input("Prazo (meses)", min_value=1, max_value=600, value=12, step=1))
 
     st.divider()
-    st.markdown("**CDB** · **LCI/LCA**")
+    row_tit_nego, col_nego_chk = st.columns([0.58, 0.42])
+    with row_tit_nego:
+        st.markdown("**CDB** · **LCI/LCA**")
+    with col_nego_chk:
+        exibir_negociacao = st.checkbox(
+            "Condições negociáveis",
+            value=False,
+            key="chk_cond_nego",
+            help="Ao marcar, abre o bloco de taxa negociada e carência logo abaixo (antes do Fundo DI).",
+        )
+
     col_cdb, col_lci = st.columns(2)
 
     with col_cdb:
@@ -521,6 +741,47 @@ with col_param:
             disabled=not inc_lci or not inc_lci_pre,
         )
 
+    if exibir_negociacao:
+        st.markdown("##### Condições Negociais — taxa negociada e carência")
+        st.caption(
+            "A linha ✨ na tabela aparece logo abaixo do ativo correspondente (se ele estiver no quadro). "
+            "CDB e LCI: em pós informe % do CDI; em pré informe a taxa % a.a."
+        )
+        ativo_negociado = st.selectbox(
+            "Ativo a negociar",
+            options=OPCOES_NEGOCIACAO_RF,
+            key="nego_ativo",
+        )
+        _nego_e_pre = "pré" in ativo_negociado
+        _label_taxa_nego = (
+            "Taxa negociada (% do CDI)"
+            if not _nego_e_pre
+            else "Taxa negociada (% a.a.)"
+        )
+        _help_taxa_nego = (
+            "Percentual do CDI negociado (pós-fixado), para CDB ou LCI/LCA."
+            if not _nego_e_pre
+            else "Taxa pré-fixada anual negociada (% a.a.), para CDB ou LCI/LCA."
+        )
+        nova_taxa_negociada = st.number_input(
+            _label_taxa_nego,
+            min_value=0.0,
+            max_value=500.0,
+            value=0.0,
+            step=0.05,
+            format="%.2f",
+            key="nego_taxa",
+            help=_help_taxa_nego,
+        )
+        meses_carencia = st.number_input(
+            "Prazo de Carência (meses)",
+            min_value=0,
+            max_value=600,
+            value=6,
+            step=1,
+            key="nego_carencia",
+        )
+
     st.divider()
     st.markdown("**Fundo DI**")
     inc_fundo = st.checkbox("Ativo", value=False, key="inc_fundo")
@@ -548,9 +809,6 @@ with col_param:
             disabled=not inc_fundo,
         )
 
-    st.divider()
-    inc_poup = st.checkbox("Poupança (regra BCB Selic/TR)", value=True, key="inc_poup")
-
 with col_result:
     st.markdown("**Mercado (BCB)** · SGS / API pública")
     m1, m2, m3, m4 = st.columns(4)
@@ -559,7 +817,7 @@ with col_result:
     m3.metric("IPCA 12m", f"{ipca_12m:.2f}%", help="Acumulado 12 meses (série 13522).")
     m4.metric("TR mês", f"{tr_m:.4f}%", help="Série 7811.")
 
-    row_res_t, row_res_g = st.columns([2.0, 1.1])
+    row_res_t, row_res_g, row_res_p = st.columns([1.35, 1.25, 1.4])
     with row_res_t:
         st.markdown("**Resultados**")
     with row_res_g:
@@ -568,106 +826,77 @@ with col_result:
             value=False,
             help="Quando marcado, desconta o IPCA acumulado em 12 meses (última leitura BCB).",
         )
+    with row_res_p:
+        inc_poup = st.checkbox(
+            "Incluir Poupança no quadro",
+            value=True,
+            key="inc_poup",
+            help="Quando desmarcado, a Poupança não aparece na tabela de resultados.",
+        )
 
+exibir_negociacao_ss = bool(st.session_state.get("chk_cond_nego", False))
+ativo_negociado = str(st.session_state.get("nego_ativo", OPCOES_NEGOCIACAO_RF[0]))
+nova_taxa_negociada = float(st.session_state.get("nego_taxa", 0.0))
+meses_carencia = int(st.session_state.get("nego_carencia", 6))
+
+linhas = montar_linhas(
+    inc_poup=inc_poup,
+    inc_cdb=inc_cdb,
+    inc_cdb_pos=inc_cdb_pos,
+    inc_cdb_pre=inc_cdb_pre,
+    pct_cdb=pct_cdb,
+    pre_cdb=pre_cdb,
+    inc_lci=inc_lci,
+    inc_lci_pos=inc_lci_pos,
+    inc_lci_pre=inc_lci_pre,
+    pct_lci=pct_lci,
+    pre_lci=pre_lci,
+    inc_fundo=inc_fundo,
+    pct_fundo_cdi=pct_fundo_cdi,
+    adm_fundo=adm_fundo,
+    poupanca_aa_equiv=poupanca_aa_equiv,
+    cdi_aa=cdi_aa,
+)
+
+negociacao_ativa = exibir_negociacao_ss and nova_taxa_negociada > 0
+
+with col_result:
     prazo_dias = int(prazo_meses * 30)
-
-    linhas: list[dict[str, Any]] = []
-
-    if inc_poup:
-        linhas.append(
-            {
-                "nome": "Poupança",
-                "tipo": "Poupança",
-                "taxa_liquida_anual": poupanca_aa_equiv,
-                "detalhe": f"~{poupanca_aa_equiv * 100:.2f}% a.a. eq.",
-            }
-        )
-
-    if inc_cdb and inc_cdb_pos:
-        bruta = taxa_bruta_anual_decimal("pos", pct_cdb, pre_cdb, cdi_aa)
-        linhas.append(
-            {
-                "nome": "CDB · pós",
-                "tipo": "CDB",
-                "taxa_bruta_anual": bruta,
-                "detalhe": f"{pct_cdb:.2f}% CDI → ~{bruta * 100:.2f}% bruto",
-            }
-        )
-    if inc_cdb and inc_cdb_pre:
-        bruta = taxa_bruta_anual_decimal("pre", pct_cdb, pre_cdb, cdi_aa)
-        linhas.append(
-            {
-                "nome": "CDB · pré",
-                "tipo": "CDB",
-                "taxa_bruta_anual": bruta,
-                "detalhe": f"Pré {pre_cdb:.2f}% a.a.",
-            }
-        )
-
-    if inc_lci and inc_lci_pos:
-        bruta = taxa_bruta_anual_decimal("pos", pct_lci, pre_lci, cdi_aa)
-        linhas.append(
-            {
-                "nome": "LCI/LCA · pós",
-                "tipo": "LCI/LCA",
-                "taxa_bruta_anual": bruta,
-                "detalhe": f"{pct_lci:.2f}% CDI → ~{bruta * 100:.2f}% bruto",
-            }
-        )
-    if inc_lci and inc_lci_pre:
-        bruta = taxa_bruta_anual_decimal("pre", pct_lci, pre_lci, cdi_aa)
-        linhas.append(
-            {
-                "nome": "LCI/LCA · pré",
-                "tipo": "LCI/LCA",
-                "taxa_bruta_anual": bruta,
-                "detalhe": f"Pré {pre_lci:.2f}% a.a.",
-            }
-        )
-
-    if inc_fundo:
-        bruta_fundo_cdi = (cdi_aa * (pct_fundo_cdi / 100.0)) / 100.0
-        bruta_fundo = max(bruta_fundo_cdi - adm_fundo / 100.0, 0.0)
-        linhas.append(
-            {
-                "nome": "Fundo DI",
-                "tipo": "CDB",
-                "taxa_bruta_anual": bruta_fundo,
-                "detalhe": f"{pct_fundo_cdi:.2f}% CDI − {adm_fundo:.2f}% adm",
-            }
-        )
 
     resultados: list[dict[str, str]] = []
 
     for info in linhas:
-        if "taxa_liquida_anual" in info:
-            taxa_liquida_anual = float(info["taxa_liquida_anual"])
-            ir_label = "0%"
-        else:
-            bruta = float(info["taxa_bruta_anual"])
-            aliquota_ir = calcular_ir(prazo_dias, str(info["tipo"]))
-            taxa_liquida_anual = bruta * (1 - aliquota_ir)
-            ir_label = f"{aliquota_ir * 100:.1f}%"
-
-        if exibir_inflacao:
-            taxa_exibida = (1 + taxa_liquida_anual) / (1 + ipca_12m / 100) - 1
-        else:
-            taxa_exibida = taxa_liquida_anual
-
-        valor_final, taxa_mensal = projetar_montante(valor_total, taxa_exibida, prazo_meses)
-        recebido = valor_final - valor_total
-
         resultados.append(
-            {
-                "Ativo": str(info["nome"]),
-                "Condição": str(info.get("detalhe", "")),
-                "IR": ir_label,
-                "% mês": f"{taxa_mensal * 100:.3f}",
-                "% a.a.": f"{taxa_exibida * 100:.2f}",
-                "Montante": f"R$ {format_moeda_br(valor_final)}",
-                "Recebido": f"R$ {format_moeda_br(recebido)}",
-            }
+            resultado_para_tabela(
+                info,
+                valor_total=valor_total,
+                prazo_meses=prazo_meses,
+                prazo_dias=prazo_dias,
+                exibir_inflacao=exibir_inflacao,
+                ipca_12m=ipca_12m,
+            )
         )
+        if (
+            negociacao_ativa
+            and info["nome"] == ativo_negociado
+            and "taxa_bruta_anual" in info
+        ):
+            info_neg = linha_negociada_de_pai(
+                info,
+                nova_taxa_negociada,
+                meses_carencia,
+                cdi_aa,
+            )
+            resultados.append(
+                resultado_para_tabela(
+                    info_neg,
+                    valor_total=valor_total,
+                    prazo_meses=prazo_meses,
+                    prazo_dias=prazo_dias,
+                    exibir_inflacao=exibir_inflacao,
+                    ipca_12m=ipca_12m,
+                )
+            )
 
     if not resultados:
         st.warning("Marque ao menos um produto à esquerda (e modalidades CDB/LCI, se aplicável).")
@@ -725,7 +954,9 @@ with col_result:
             st.error(f"Não foi possível gerar o PDF ({e}). Instale: pip install reportlab")
 
 st.markdown(
-    '<p class="hart-footer-note">Fonte: SGS/BCB · educacional — não substitui assessoria; IR sobre rendimento; fundos podem ter come-cotas. '
-    'Conheça também o <a href="https://simula-lance.streamlit.app/" target="_blank" rel="noopener noreferrer">Simula Lance</a> — simulador de consórcio.</p>',
+    '<p class="hart-footer-note">Fonte: SGS/BCB · educacional — não substitui assessoria; IR sobre rendimento; fundos podem ter come-cotas.</p>'
+    '<p class="hart-footer-note hart-footer-simula-lance">Conheça também o '
+    '<a href="https://simula-lance.streamlit.app/" target="_blank" rel="noopener noreferrer">Simula Lance</a> '
+    '— simulador de consórcio.</p>',
     unsafe_allow_html=True,
 )
