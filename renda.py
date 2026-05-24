@@ -933,6 +933,37 @@ def estilizar_tabela_comparativo_carteiras(df: pd.DataFrame, tipos: list[str]) -
 _FRACS_CARTEIRA_UI = [0.12, 0.28, 0.07, 0.09, 0.09, 0.17, 0.14]
 _FRACS_CARTEIRA_COM_EXCL = [0.045, *(_FRACS_CARTEIRA_UI)]
 
+_COLS_COMPARATIVO_UI = ["Ativo", "Condição", "IR", "% mês", "% a.a.", "Montante", "Recebido"]
+_COL_ALIGN_COMPARATIVO = ("left", "left", "center", "right", "right", "right", "right")
+
+
+def exibir_tabela_comparativo_ativos(linhas: list[dict[str, str]]) -> None:
+    """Tabela do comparativo: visual do st.dataframe, largura 100% (sem corte em zoom)."""
+    from xml.sax.saxutils import escape
+
+    colgroup = "".join(
+        f'<col style="width:{w * 100:.1f}%;" />' for w in _FRACS_CARTEIRA_UI
+    )
+    head = "".join(
+        f'<th class="hart-tbl-comp-th hart-tbl-comp-align-{a}">{escape(nome)}</th>'
+        for nome, a in zip(_COLS_COMPARATIVO_UI, _COL_ALIGN_COMPARATIVO, strict=True)
+    )
+    body_rows: list[str] = []
+    for i, linha in enumerate(linhas):
+        zebra = " hart-tbl-comp-row-alt" if i % 2 else ""
+        cells = "".join(
+            f'<td class="hart-tbl-comp-td hart-tbl-comp-align-{a}">{escape(str(linha.get(col, "")))}</td>'
+            for col, a in zip(_COLS_COMPARATIVO_UI, _COL_ALIGN_COMPARATIVO, strict=True)
+        )
+        body_rows.append(f'<tr class="hart-tbl-comp-row{zebra}">{cells}</tr>')
+    tbody = "".join(body_rows)
+    st.markdown(
+        f'<div class="hart-tbl-comparativo-grid">'
+        f'<table class="hart-tbl-comp-table"><colgroup>{colgroup}</colgroup>'
+        f"<thead><tr>{head}</tr></thead><tbody>{tbody}</tbody></table></div>",
+        unsafe_allow_html=True,
+    )
+
 
 def exibir_quadro_resultados_carteira(
     cons: dict[str, Any],
@@ -2291,6 +2322,55 @@ st.markdown(
     div[data-testid="stDataFrame"] [class*="dvn"] {
         min-height: 22px !important;
     }
+    /* Comparativo de ativos: coluna de resultados (~68%) encolhe no flex */
+    section.main div[data-testid="stHorizontalBlock"]:has(.hart-col-resultados-comp) > div[data-testid="column"] {
+        min-width: 0 !important;
+    }
+    /* Tabela comparativo — mesmo visual do st.dataframe (grid), largura fluida */
+    .hart-tbl-comparativo-grid {
+        width: 100%;
+        max-width: 100%;
+        margin: 0.15rem 0 0.45rem 0;
+        border: 1px solid rgba(49, 51, 63, 0.12);
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        background: #fff;
+        box-sizing: border-box;
+    }
+    .hart-tbl-comp-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+        font-size: 0.78rem;
+        line-height: 1.2;
+    }
+    .hart-tbl-comp-table .hart-tbl-comp-th {
+        background: #f0f2f6;
+        color: rgba(49, 51, 63, 0.88);
+        font-weight: 600;
+        padding: 0.45rem 0.5rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.12);
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .hart-tbl-comp-table .hart-tbl-comp-td {
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px solid rgba(49, 51, 63, 0.08);
+        color: rgba(49, 51, 63, 0.92);
+        vertical-align: middle;
+        word-break: break-word;
+        min-height: 22px;
+    }
+    .hart-tbl-comp-table .hart-tbl-comp-row-alt .hart-tbl-comp-td {
+        background: #fafbfc;
+    }
+    .hart-tbl-comp-table tbody tr:last-child .hart-tbl-comp-td {
+        border-bottom: none;
+    }
+    .hart-tbl-comp-align-left { text-align: left; }
+    .hart-tbl-comp-align-center { text-align: center; }
+    .hart-tbl-comp-align-right { text-align: right; }
     div[data-testid="stAppViewContainer"] .main {
         overflow-x: auto;
     }
@@ -2798,6 +2878,10 @@ else:
             )
 
     with col_result:
+        st.markdown(
+            '<span class="hart-col-resultados-comp" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
         st.markdown("**Mercado (BCB)** · SGS / API pública")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Selic meta", f"{selic_meta_aa:.2f}%", help="Série 432, % a.a.")
@@ -2928,25 +3012,7 @@ else:
             st.caption(f"{prazo_meses} meses · {prazo_dias} dias (IR) · {_modo}. {_det}")
 
             df_res = pd.DataFrame(resultados)
-            _n = len(resultados)
-            _h = 52 + _n * 42
-            st.dataframe(
-                df_res,
-                use_container_width=True,
-                hide_index=True,
-                height=min(520, max(110, _h)),
-                column_config={
-                    "Ativo": st.column_config.TextColumn("Ativo", width="medium"),
-                    "Condição": st.column_config.TextColumn("Condição", width="large"),
-                    _COL_IR_EFETIVO: st.column_config.TextColumn(
-                        _LABEL_IR_EFETIVO, width="small"
-                    ),
-                    "% mês": st.column_config.TextColumn("% mês", width="small"),
-                    "% a.a.": st.column_config.TextColumn("% a.a.", width="small"),
-                    "Montante": st.column_config.TextColumn("Montante", width=None),
-                    "Recebido": st.column_config.TextColumn("Recebido", width=None),
-                },
-            )
+            exibir_tabela_comparativo_ativos(resultados)
             try:
                 pdf_bytes = gerar_pdf_resultados(
                     df_res,
