@@ -506,10 +506,25 @@ def resultado_para_tabela(
     taxa_exibida = sim["taxa_aa_liq"]
 
     if exibir_inflacao:
-        taxa_exibida = (1.0 + taxa_exibida) / (1.0 + ipca_12m / 100.0) - 1.0
-        taxa_mensal = (1.0 + taxa_mensal) / (1.0 + ipca_12m / 100.0) - 1.0
-        valor_final = valor_total * (1.0 + taxa_mensal) ** prazo_meses
+        ipca_decimal = ipca_12m / 100.0
+        montante_liquido = valor_final
+        rent_liq_periodo = (
+            (montante_liquido / valor_total - 1.0) if valor_total > 0 else 0.0
+        )
+        ipca_periodo = (
+            (1.0 + ipca_decimal) ** (prazo_meses / 12.0) - 1.0
+            if prazo_meses > 0
+            else 0.0
+        )
+        rent_real_periodo = (1.0 + rent_liq_periodo) / (1.0 + ipca_periodo) - 1.0
+        valor_final = valor_total * (1.0 + rent_real_periodo)
         recebido = valor_final - valor_total
+        if prazo_meses > 0:
+            taxa_mensal = (1.0 + rent_real_periodo) ** (1.0 / prazo_meses) - 1.0
+            taxa_exibida = (1.0 + rent_real_periodo) ** (12.0 / prazo_meses) - 1.0
+        else:
+            taxa_mensal = 0.0
+            taxa_exibida = 0.0
 
     ir_label = "0%" if aliquota_ir <= 0 else f"{aliquota_ir * 100:.1f}%"
 
