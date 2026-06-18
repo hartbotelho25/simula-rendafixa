@@ -17,7 +17,7 @@ import streamlit as st
 
 # --- Códigos SGS (BCB) ---
 SGS_SELIC_META_AA = 432  # Selic meta Copom, % a.a.
-SGS_CDI_DIARIO = 12  # CDI, % ao dia (base 252)
+SGS_CDI_DIARIO = 12  # CDI, % ao dia (série diária Cetip; base 252 para anualização)
 SGS_IPCA_12M = 13522  # IPCA acumulado 12 meses, %
 SGS_TR_MENSAL = 7811  # TR, % ao mês
 
@@ -2590,6 +2590,10 @@ except Exception as e:
     st.stop()
 
 cdi_aa = cdi_percentual_anual(cdi_dia)
+cdi_aa_teto = max(selic_meta_aa - 0.10, 0.0)
+if cdi_aa > cdi_aa_teto:
+    cdi_aa = cdi_aa_teto
+    cdi_dia = ((1 + cdi_aa / 100) ** (1 / 252) - 1) * 100
 tx_mes_poup = poupança_taxa_mensal_aproximada(selic_meta_aa, tr_m, cdi_dia)
 poupanca_aa_equiv = (1 + tx_mes_poup) ** 12 - 1
 
